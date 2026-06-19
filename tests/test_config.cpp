@@ -54,3 +54,24 @@ TEST_CASE("malformed uid throws") {
       parse_config({{"AGORA_APP_ID", "app"}}, {"--channel", "room1", "--uid", "abc"}),
       std::runtime_error);
 }
+
+TEST_CASE("uid overflow throws") {
+  CHECK_THROWS_AS(
+      parse_config({{"AGORA_APP_ID", "app"}},
+                   {"--channel", "room1", "--uid", "4294967296"}),
+      std::runtime_error);
+}
+
+TEST_CASE("negative uid throws") {
+  CHECK_THROWS_AS(
+      parse_config({{"AGORA_APP_ID", "app"}},
+                   {"--channel", "room1", "--uid", "-5"}),
+      std::runtime_error);
+}
+
+TEST_CASE("unknown flag throws") {
+  CHECK_THROWS_AS(
+      parse_config({{"AGORA_APP_ID", "app"}},
+                   {"--channel", "room1", "--bogus"}),
+      std::runtime_error);
+}

@@ -1,4 +1,5 @@
 #include "config.h"
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -14,6 +15,8 @@ std::uint32_t parse_u32(const std::string& s, const char* what) {
     size_t pos = 0;
     unsigned long v = std::stoul(s, &pos);
     if (pos != s.size()) throw std::invalid_argument(what);
+    if (v > std::numeric_limits<std::uint32_t>::max())
+      throw std::invalid_argument(what);
     return static_cast<std::uint32_t>(v);
   } catch (const std::exception&) {
     throw std::runtime_error(std::string("invalid value for ") + what + "\n" + kUsage);
