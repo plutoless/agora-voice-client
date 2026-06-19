@@ -1,6 +1,6 @@
 #pragma once
 
-// OpenSSL HMAC replaced with CommonCrypto + avc::hmac_sha256 (Task 4).
+// LOCAL MODIFICATION (see ../../PATCHES.md): OpenSSL HMAC replaced with CommonCrypto/avc::hmac_sha256
 #include <CommonCrypto/CommonHMAC.h>
 #include <vector>
 #include "token.h"

@@ -1,5 +1,6 @@
 #include "doctest.h"
 #include "token.h"
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -28,4 +29,10 @@ TEST_CASE("build_rtc_token returns an AccessToken2 string") {
       "room1", 1001, 3600);
   CHECK(t.rfind("007", 0) == 0);  // AccessToken2 version prefix
   CHECK(t.size() > 20);
+  CHECK(!t.empty());
+}
+
+TEST_CASE("build_rtc_token throws on invalid credentials") {
+  CHECK_THROWS_AS(avc::build_rtc_token("bad", "bad", "room1", 1001, 3600),
+                  std::runtime_error);
 }
