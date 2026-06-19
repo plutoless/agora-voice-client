@@ -59,7 +59,10 @@ Environment variables:
 
 CLI flags:
 - `--channel <name>` — **required**.
-- `--uid <n>` — optional, default `0` (Agora auto-assigns a uid).
+- `--uid <n>` — the **Client UID**. Defaults to `0` (auto-assign), but `0` only works
+  for solo/echo testing. For talking to the AI Agent it must be set to the fixed uid the
+  AI subscribes to (see ADR-0003). The resolved uid is a single value used for *both*
+  token minting and channel join so they cannot drift.
 - `--token-ttl <seconds>` — optional, default `3600`. Used only when minting locally.
 
 Token resolution order:
@@ -77,15 +80,28 @@ independently.
 1. **`config`** — parses env vars + CLI flags, validates required fields, produces a
    `ClientConfig` value. No Agora dependency → unit-testable in isolation.
 2. **`token`** — given app id, certificate, channel, uid, ttl, returns a token string.
-   Wraps Agora's RtcToken builder. Bypassed when an explicit token is supplied.
+   Wraps Agora's vendored **AccessToken2** builder (`RtcTokenBuilder2`, copied from the
+   `AgoraIO/Tools` repo into `third_party/agora-token/`; not the legacy builder). Its
+   OpenSSL HMAC-SHA256 dependency is replaced with a platform-native `hmac_sha256()`
+   call — **CommonCrypto (`CCHmac`) on macOS** — so the token feature adds no external
+   build dependency. The `hmac_sha256()` seam lets Windows (BCrypt) and Linux (OpenSSL)
+   slot in later. Bypassed when an explicit `AGORA_TOKEN` is supplied.
 3. **`voice_engine`** — a thin interface over Agora that owns the `IRtcEngine`
-   lifecycle: create → `initialize` (audio profile; channel profile = communication;
-   3A enabled) → `joinChannel` → `leaveChannel` → release. Because devices and 3A are
-   the SDK's job, this unit stays small. The interface is what makes future platforms
+   lifecycle: create → `initialize` → set channel profile `LIVE_BROADCASTING` →
+   `setClientRole(BROADCASTER)` → set a **speech-optimized mono audio profile** with an
+   **AEC-preserving scenario** (echo cancellation must stay on — ADR-0002/3A is the whole
+   point) → `joinChannel` → `leaveChannel` → release. Profile/role/audio config are fixed
+   (no tuning flags in v1). See ADR-0004 for the profile + role choice. Because devices
+   and 3A are the SDK's job, this unit stays small. The interface is what makes future platforms
    pluggable; the macOS implementation is the first concrete one.
-4. **`event_handler`** — implements `IRtcEngineEventHandler`; logs the events that
+4. **event handling** — on macOS this is an `AgoraRtcEngineDelegate` living inside
+   `voice_engine_agora.mm` (ADR-0005), not a separate C++ file. It logs the events that
    matter (join success, connection-state changes, remote user joined/left, warnings,
-   errors) to **stderr**.
+   errors) to **stderr** and surfaces semantic C++ callbacks through the `voice_engine`
+   interface. Token expiry is surfaced as a callback; `main` performs the **automatic
+   local token renewal** (re-mint via the `token` unit, then `renewToken()`), keeping
+   certificate handling out of the engine. This relies on the Client holding the App
+   Certificate locally (ADR-0001).
 5. **`main`** — wires the units together, installs SIGINT/SIGTERM handlers, blocks
    until a signal arrives, then triggers a clean shutdown.
 
@@ -94,7 +110,8 @@ independently.
 ```
 parse config
   → resolve token (explicit | mint | none)
-  → create + initialize engine (audio profile, communication mode, 3A on)
+  → create + initialize engine (LIVE_BROADCASTING, role BROADCASTER,
+      speech-optimized mono audio profile, AEC-preserving scenario, 3A on)
   → register event handler
   → joinChannel
   → [microphone live, remote audio plays, events logged to stderr]
@@ -111,6 +128,12 @@ parse config
 - SDK init / join failures: log the Agora error code and its meaning, exit non-zero.
 - Signal received during a call: perform a graceful `leaveChannel` + `release` so the
   call ends cleanly on Agora's side (no ghost participant left in the channel).
+- Transient network drops: **rely on the SDK's built-in auto-reconnection** — no custom
+  rejoin logic. Log the RECONNECTING → CONNECTED transitions to stderr.
+- Unrecoverable connection failure (`CONNECTION_STATE_FAILED`, e.g. banned uid, invalid
+  app id, SDK gave up): log the reason and **exit non-zero** rather than retrying forever.
+- AI Agent presence does **not** affect lifecycle: log "AI Agent joined / left" for
+  visibility, but the Client keeps running. Only a signal or unrecoverable failure ends it.
 - All operational logs go to **stderr**, keeping stdout clean for possible future
   status piping.
 
@@ -120,6 +143,11 @@ parse config
 - macOS target links `AgoraRtcKit.framework` from the Agora Voice/Video SDK download,
   with loader/rpath configured so the packaged binary finds the framework next to
   itself.
+- The build embeds an `Info.plist` (with `NSMicrophoneUsageDescription`) into the Mach-O
+  and **ad-hoc code-signs** the binary so macOS grants microphone access. No Apple
+  Developer certificate is required now (see ADR-0002); Developer ID + notarization is a
+  later upgrade. First run must be in a GUI Terminal at the Mac to approve the mic
+  prompt; each rebuild re-prompts under ad-hoc signing.
 - Project layout:
   ```
   CMakeLists.txt
@@ -127,11 +155,12 @@ parse config
     main.cpp
     config.{h,cpp}
     token.{h,cpp}
-    voice_engine.h            # interface
-    voice_engine_agora.cpp    # macOS/Windows IRtcEngine implementation
-    event_handler.{h,cpp}
+    voice_engine.h            # pure C++ interface + semantic callbacks
+    voice_engine_agora.mm     # macOS Obj-C++ impl (AgoraRtcEngineKit + delegate)
   third_party/agora/          # SDK framework + headers (fetched, gitignored)
-  scripts/                    # SDK download / package helpers
+  third_party/agora-token/    # vendored AccessToken2 builder (committed)
+  scripts/fetch-sdk.sh        # downloads pinned Voice SDK + verifies checksum
+  scripts/                    # packaging helpers
   README.md                   # how to get the SDK, set env, run
   ```
 
@@ -161,12 +190,16 @@ The download skill selects the right archive for the host, unpacks it, and runs
   whatever APM the Linux SDK offers) behind the same interface, so it never degrades
   the macOS/Windows path. This is a future decision, not part of the first version.
 
-## Open Item to Verify at Planning Time
+## Resolved at Planning Time
 
-Confirm whether the high-level `IRtcEngine` API is used uniformly on macOS and Windows
-(expected yes) and pin the exact SDK package/version and its 3A configuration calls.
-This only affects how much per-platform code lives behind the `voice_engine` interface;
-it does not change the overall design.
+- **macOS API surface:** the supported entry point is the Objective-C `AgoraRtcEngineKit`,
+  not the C++ `IRtcEngine` (which is only reachable by bridging in an `.mm` file). The
+  macOS `voice_engine` is therefore Objective-C++ against `AgoraRtcEngineKit` (ADR-0005);
+  the C++ interface is reserved for future Windows/Linux implementations.
+- **Token builder:** `agora::tools::RtcTokenBuilder2::BuildTokenWithUid(...)` (AccessToken2),
+  vendored, with HMAC routed to CommonCrypto.
+- Still pin at implementation time: the exact 4.x Voice SDK package URL + checksum, and
+  the precise `AgoraAudioScenario`/`AgoraAudioProfile` enum values that keep AEC enabled.
 
 ## Testing
 
