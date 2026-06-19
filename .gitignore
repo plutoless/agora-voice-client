@@ -1,0 +1,4 @@
+build/
+third_party/agora/
+*.o
+.DS_Store
