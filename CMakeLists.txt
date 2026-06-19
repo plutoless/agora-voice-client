@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+find_package(ZLIB REQUIRED)
+
 # ---- Tests (pure C++, no Agora RTC SDK needed) ----
 add_executable(tests
   tests/doctest_main.cpp
@@ -18,7 +20,9 @@ add_executable(tests
 target_include_directories(tests PRIVATE
   ${CMAKE_SOURCE_DIR}/third_party/doctest
   ${CMAKE_SOURCE_DIR}/src
+  ${CMAKE_SOURCE_DIR}/third_party/agora-token
 )
+target_link_libraries(tests PRIVATE ZLIB::ZLIB)
 
 enable_testing()
 add_test(NAME tests COMMAND tests)
