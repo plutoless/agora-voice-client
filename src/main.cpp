@@ -89,9 +89,14 @@ int main(int argc, char** argv) {
   cb.on_reconnected   = [&] { reporter->reconnected(); };
   cb.on_error         = [&](int code) { reporter->error(code, ""); };
   cb.on_token_will_expire = [&] {
-    if (cfg.token_source == avc::TokenSource::Mint) {
+    if (cfg.token_source != avc::TokenSource::Mint) return;
+    try {
       engine->renew_token(mint());
       reporter->token_renewed();
+    } catch (const std::exception& e) {
+      reporter->fatal(1, e.what());
+      fatal_code.store(1);
+      g_stop.store(true);
     }
   };
   cb.on_fatal = [&](int code) {
