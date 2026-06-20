@@ -16,6 +16,7 @@ TEST_CASE("json_escape handles quotes, backslashes, control chars") {
   CHECK(avc::json_escape("a\"b\\c") == "a\\\"b\\\\c");
   CHECK(avc::json_escape("line\nbreak\ttab") == "line\\nbreak\\ttab");
   CHECK(avc::json_escape(std::string("x\x01y")) == "x\\u0001y");
+  CHECK(avc::json_escape("\b\f") == "\\b\\f");
 }
 
 TEST_CASE("meta event carries protocol, client, version") {
@@ -70,4 +71,18 @@ TEST_CASE("stopping carries reason; bare events well-formed; line count") {
   CHECK(contains(out, "\"type\":\"stopping\""));
   CHECK(contains(out, "\"reason\":\"signal\""));
   CHECK(std::count(out.begin(), out.end(), '\n') == 4);
+}
+
+TEST_CASE("HumanEventReporter emits readable [avc] lines") {
+  std::ostringstream os;
+  avc::HumanEventReporter r(os);
+  r.meta("agora-voice-client", "v1");
+  r.ready("room1", 1001);
+  r.peer_joined(42);
+  r.fatal(5, "boom");
+  const std::string out = os.str();
+  CHECK(contains(out, "[avc] agora-voice-client v1"));
+  CHECK(contains(out, "[avc] ready channel=room1 uid=1001"));
+  CHECK(contains(out, "[avc] peer joined uid=42"));
+  CHECK(contains(out, "[avc] fatal code=5 boom"));
 }

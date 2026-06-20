@@ -61,8 +61,8 @@ Every line is `{"type": <string>, "ts": <unix_ms>, ...fields}`. Lifecycle-only s
 | `fatal` | `code` (number), `message` (string) | unrecoverable; process exits non-zero next |
 | `stopping` | `reason` (`"signal"` \| `"fatal"`) | clean shutdown of an established session |
 
-`ts` is Unix milliseconds. The only user-supplied string field is `channel`, which is
-JSON-escaped.
+`ts` is Unix milliseconds. All user-supplied string fields (`channel`, `message`,
+`reason`, `client`, `version`) are JSON-escaped.
 
 ### Terminal-event guarantee (failure paths are self-describing)
 
