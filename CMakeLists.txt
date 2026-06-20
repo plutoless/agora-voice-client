@@ -40,6 +40,9 @@ target_include_directories(agora-voice-client PRIVATE
   ${CMAKE_SOURCE_DIR}/third_party/agora-token
 )
 
+set(AVC_VERSION "dev" CACHE STRING "Version string stamped into the binary")
+target_compile_definitions(agora-voice-client PRIVATE AVC_VERSION_STR="${AVC_VERSION}")
+
 set(AGORA_FW_DIR ${CMAKE_SOURCE_DIR}/third_party/agora)
 
 target_compile_options(agora-voice-client PRIVATE -fobjc-arc -F${AGORA_FW_DIR})

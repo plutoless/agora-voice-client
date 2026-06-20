@@ -13,12 +13,29 @@
 #include "token.h"
 #include "voice_engine.h"
 
+#ifndef AVC_VERSION_STR
+#define AVC_VERSION_STR "dev"
+#endif
+
 namespace {
 std::atomic<bool> g_stop{false};
 void handle_signal(int) { g_stop.store(true); }
 }  // namespace
 
 int main(int argc, char** argv) {
+  for (int i = 1; i < argc; ++i) {
+    const std::string arg = argv[i];
+    if (arg == "--version") {
+      std::cout << "agora-voice-client " << AVC_VERSION_STR << "\n";
+      return 0;
+    }
+    if (arg == "--help" || arg == "-h") {
+      std::cout << "usage: agora-voice-client --channel <name> [--uid <n>] "
+                   "[--token-ttl <seconds>] [--version]\n";
+      return 0;
+    }
+  }
+
   std::map<std::string, std::string> env;
   for (const char* name : {"AGORA_APP_ID", "AGORA_APP_CERTIFICATE", "AGORA_TOKEN"}) {
     if (const char* v = std::getenv(name)) env[name] = v;
