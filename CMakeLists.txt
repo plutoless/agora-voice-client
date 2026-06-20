@@ -14,8 +14,10 @@ add_executable(tests
   tests/test_smoke.cpp
   tests/test_config.cpp
   tests/test_token.cpp
+  tests/test_event_reporter.cpp
   src/config.cpp
   src/token.cpp
+  src/event_reporter.cpp
 )
 target_include_directories(tests PRIVATE
   ${CMAKE_SOURCE_DIR}/third_party/doctest
