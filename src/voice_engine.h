@@ -11,6 +11,9 @@ struct VoiceEngineCallbacks {
   std::function<void()> on_joined;                        // joined channel ok
   std::function<void(std::uint32_t uid)> on_user_joined;  // AI Agent joined
   std::function<void(std::uint32_t uid)> on_user_left;    // AI Agent left
+  std::function<void()> on_reconnecting;                  // connection dropped, retrying
+  std::function<void()> on_reconnected;                   // connection restored
+  std::function<void(int code)> on_error;                 // non-fatal SDK error
   std::function<void()> on_token_will_expire;             // renew needed
   std::function<void(int code)> on_fatal;                 // unrecoverable; main exits
 };

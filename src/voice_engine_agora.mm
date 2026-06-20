@@ -12,10 +12,10 @@ using namespace avc;
 @implementation AvcDelegate {
 @public
   VoiceEngineCallbacks _cb;
+  BOOL _reconnecting;
 }
 - (void)rtcEngine:(AgoraRtcEngineKit * _Nonnull)engine
     didJoinChannel:(NSString * _Nonnull)channel withUid:(NSUInteger)uid elapsed:(NSInteger)elapsed {
-  fprintf(stderr, "[avc] joined channel as uid=%lu\n", (unsigned long)uid);
   if (_cb.on_joined) _cb.on_joined();
 }
 - (void)rtcEngine:(AgoraRtcEngineKit * _Nonnull)engine
@@ -28,17 +28,25 @@ using namespace avc;
 }
 - (void)rtcEngine:(AgoraRtcEngineKit * _Nonnull)engine
     tokenPrivilegeWillExpire:(NSString * _Nonnull)token {
-  fprintf(stderr, "[avc] token will expire; renewing\n");
   if (_cb.on_token_will_expire) _cb.on_token_will_expire();
 }
 - (void)rtcEngine:(AgoraRtcEngineKit * _Nonnull)engine
     connectionChangedToState:(AgoraConnectionState)state
                       reason:(AgoraConnectionChangedReason)reason {
-  fprintf(stderr, "[avc] connection state=%ld reason=%ld\n", (long)state, (long)reason);
-  if (state == AgoraConnectionStateFailed && _cb.on_fatal) _cb.on_fatal((int)reason);
+  if (state == AgoraConnectionStateReconnecting) {
+    _reconnecting = YES;
+    if (_cb.on_reconnecting) _cb.on_reconnecting();
+  } else if (state == AgoraConnectionStateConnected) {
+    if (_reconnecting) {
+      _reconnecting = NO;
+      if (_cb.on_reconnected) _cb.on_reconnected();
+    }
+  } else if (state == AgoraConnectionStateFailed) {
+    if (_cb.on_fatal) _cb.on_fatal((int)reason);
+  }
 }
 - (void)rtcEngine:(AgoraRtcEngineKit * _Nonnull)engine didOccurError:(AgoraErrorCode)errorCode {
-  fprintf(stderr, "[avc] error code=%ld\n", (long)errorCode);
+  if (_cb.on_error) _cb.on_error((int)errorCode);
 }
 @end
 
