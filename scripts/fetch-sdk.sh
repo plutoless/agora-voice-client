@@ -6,8 +6,8 @@ set -euo pipefail
 #
 # HOW TO UPDATE THIS SCRIPT:
 #   1. Visit https://docs.agora.io/en/sdks?platform=macos and locate the
-#      macOS Native SDK release you want (Voice or Full — both contain
-#      AgoraRtcKit.framework).
+#      macOS Native SDK release you want (only the FULL package is available
+#      publicly and contains AgoraRtcKit.framework).
 #   2. The public CDN pattern is:
 #        https://download.agora.io/sdk/release/Agora_Native_SDK_for_Mac_v<VERSION>_FULL.zip
 #      (No login required. Probe with: curl -fsIL "<url>" -o /dev/null -w "%{http_code}")
@@ -21,7 +21,7 @@ set -euo pipefail
 #       This script extracts all .framework bundles found at that level.
 # ---------------------------------------------------------------------------
 SDK_VERSION="4.4.0"
-SDK_URL="https://download.agora.io/sdk/release/Agora_Native_SDK_for_Mac_v4.4.0_FULL.zip"
+SDK_URL="https://download.agora.io/sdk/release/Agora_Native_SDK_for_Mac_v${SDK_VERSION}_FULL.zip"
 SDK_SHA256="540a46d3b301232275b4fa4ed38782680797789d042b4f8cda43bdcd2b7da027"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -42,24 +42,25 @@ fi
 unzip -q "$TMP/sdk.zip" -d "$TMP/unzipped"
 
 # AgoraRtcKit.framework lives inside AgoraRtcKit.xcframework/macos-arm64_x86_64/
-FRAMEWORK="$(find "$TMP/unzipped" -name 'AgoraRtcKit.framework' -type d | head -n1)"
+FRAMEWORK="$(find "$TMP/unzipped" -path '*/macos-*/*' -name 'AgoraRtcKit.framework' -type d | head -n1)"
+# Fallback: if no xcframework slice layout, match anywhere.
+if [ -z "$FRAMEWORK" ]; then
+  FRAMEWORK="$(find "$TMP/unzipped" -name 'AgoraRtcKit.framework' -type d | head -n1)"
+fi
 if [ -z "$FRAMEWORK" ]; then
   echo "ERROR: AgoraRtcKit.framework not found in the package" >&2
   exit 1
 fi
 
-rm -rf "$DEST"
-mkdir -p "$DEST"
-cp -R "$FRAMEWORK" "$DEST/"
-
-# Copy sibling .framework bundles from the same macos slice directory
-# (e.g. audio extensions that live alongside AgoraRtcKit.framework)
-SLICE_DIR="$(dirname "$FRAMEWORK")"
-for fw in "$SLICE_DIR"/*.framework; do
+STAGE="$TMP/stage"
+mkdir -p "$STAGE"
+cp -R "$FRAMEWORK" "$STAGE/"
+for fw in "$(dirname "$FRAMEWORK")"/*.framework; do
   [ "$fw" = "$FRAMEWORK" ] && continue
-  [ -d "$fw" ] || continue
-  cp -R "$fw" "$DEST/"
+  cp -R "$fw" "$STAGE/"
 done
-
+rm -rf "$DEST"
+mkdir -p "$(dirname "$DEST")"
+mv "$STAGE" "$DEST"
 echo "Installed frameworks into $DEST:"
 ls "$DEST"
