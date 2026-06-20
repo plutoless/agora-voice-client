@@ -5,11 +5,13 @@
 #include <exception>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include "config.h"
+#include "event_reporter.h"
 #include "token.h"
 #include "voice_engine.h"
 
@@ -23,6 +25,8 @@ void handle_signal(int) { g_stop.store(true); }
 }  // namespace
 
 int main(int argc, char** argv) {
+  bool json_mode = false;
+  std::vector<std::string> args;
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
     if (arg == "--version") {
@@ -31,22 +35,29 @@ int main(int argc, char** argv) {
     }
     if (arg == "--help" || arg == "-h") {
       std::cout << "usage: agora-voice-client --channel <name> [--uid <n>] "
-                   "[--token-ttl <seconds>] [--version]\n";
+                   "[--token-ttl <seconds>] [--json] [--version]\n";
       return 0;
     }
+    if (arg == "--json") { json_mode = true; continue; }
+    args.push_back(arg);
   }
+
+  std::unique_ptr<avc::EventReporter> reporter;
+  if (json_mode) reporter = std::make_unique<avc::JsonEventReporter>(std::cout);
+  else reporter = std::make_unique<avc::HumanEventReporter>(std::cerr);
+
+  reporter->meta("agora-voice-client", AVC_VERSION_STR);
 
   std::map<std::string, std::string> env;
   for (const char* name : {"AGORA_APP_ID", "AGORA_APP_CERTIFICATE", "AGORA_TOKEN"}) {
     if (const char* v = std::getenv(name)) env[name] = v;
   }
-  std::vector<std::string> args(argv + 1, argv + argc);
 
   avc::ClientConfig cfg;
   try {
     cfg = avc::parse_config(env, args);
   } catch (const std::exception& e) {
-    std::cerr << e.what();
+    reporter->fatal(2, e.what());
     return 2;
   }
 
@@ -56,26 +67,36 @@ int main(int argc, char** argv) {
   };
 
   std::string token;
-  switch (cfg.token_source) {
-    case avc::TokenSource::Explicit: token = cfg.explicit_token; break;
-    case avc::TokenSource::Mint:     token = mint(); break;
-    case avc::TokenSource::None:     token.clear(); break;
+  try {
+    switch (cfg.token_source) {
+      case avc::TokenSource::Explicit: token = cfg.explicit_token; break;
+      case avc::TokenSource::Mint:     token = mint(); break;
+      case avc::TokenSource::None:     token.clear(); break;
+    }
+  } catch (const std::exception& e) {
+    reporter->fatal(1, e.what());
+    return 1;
   }
 
   auto engine = avc::make_voice_engine();
-  std::atomic<int> fatal{0};
+  std::atomic<int> fatal_code{0};
 
   avc::VoiceEngineCallbacks cb;
-  cb.on_joined      = [] { std::cerr << "[avc] ready\n"; };
-  cb.on_user_joined = [](std::uint32_t uid) {
-    std::cerr << "[avc] AI Agent joined uid=" << uid << "\n"; };
-  cb.on_user_left   = [](std::uint32_t uid) {
-    std::cerr << "[avc] AI Agent left uid=" << uid << "\n"; };
+  cb.on_joined        = [&] { reporter->ready(cfg.channel, cfg.uid); };
+  cb.on_user_joined   = [&](std::uint32_t uid) { reporter->peer_joined(uid); };
+  cb.on_user_left     = [&](std::uint32_t uid) { reporter->peer_left(uid); };
+  cb.on_reconnecting  = [&] { reporter->reconnecting(); };
+  cb.on_reconnected   = [&] { reporter->reconnected(); };
+  cb.on_error         = [&](int code) { reporter->error(code, ""); };
   cb.on_token_will_expire = [&] {
-    if (cfg.token_source == avc::TokenSource::Mint) engine->renew_token(mint());
+    if (cfg.token_source == avc::TokenSource::Mint) {
+      engine->renew_token(mint());
+      reporter->token_renewed();
+    }
   };
   cb.on_fatal = [&](int code) {
-    fatal.store(code ? code : 1);
+    fatal_code.store(code ? code : 1);
+    reporter->fatal(code, "unrecoverable connection failure");
     g_stop.store(true);
   };
 
@@ -83,7 +104,7 @@ int main(int argc, char** argv) {
   std::signal(SIGTERM, handle_signal);
 
   if (!engine->start(cfg, token, cb)) {
-    std::cerr << "[avc] failed to start\n";
+    reporter->fatal(1, "failed to start");
     return 1;
   }
 
@@ -91,6 +112,7 @@ int main(int argc, char** argv) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
+  reporter->stopping(fatal_code.load() ? "fatal" : "signal");
   engine->stop();
-  return fatal.load();
+  return fatal_code.load();
 }

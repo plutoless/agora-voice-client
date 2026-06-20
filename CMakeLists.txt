@@ -34,6 +34,7 @@ add_executable(agora-voice-client
   src/main.cpp
   src/config.cpp
   src/token.cpp
+  src/event_reporter.cpp
   src/voice_engine_agora.mm
 )
 
