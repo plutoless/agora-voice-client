@@ -4,6 +4,8 @@
 
 using namespace avc;
 
+// NOTE: These delegate methods are invoked on an Agora-internal SDK thread, not the
+// main thread. The C++ callbacks in _cb must be safe to call from any thread.
 @interface AvcDelegate : NSObject <AgoraRtcEngineDelegate>
 @end
 
@@ -46,11 +48,20 @@ class AgoraVoiceEngine : public VoiceEngine {
   ~AgoraVoiceEngine() override { stop(); }
   bool start(const ClientConfig& cfg, const std::string& token,
              const VoiceEngineCallbacks& cb) override {
+    if (kit_) {
+      fprintf(stderr, "[avc] start() called while already started\n");
+      return false;
+    }
     delegate_ = [[AvcDelegate alloc] init];
     delegate_->_cb = cb;
 
     AgoraRtcEngineConfig* config = [[AgoraRtcEngineConfig alloc] init];
-    config.appId = [NSString stringWithUTF8String:cfg.app_id.c_str()];
+    NSString* appId = [NSString stringWithUTF8String:cfg.app_id.c_str()];
+    if (!appId) {
+      fprintf(stderr, "[avc] app_id is not valid UTF-8\n");
+      return false;
+    }
+    config.appId = appId;
     // Set channel profile and audio scenario at init time via config
     config.channelProfile = AgoraChannelProfileLiveBroadcasting;
     // AgoraAudioScenarioMeeting (8): meeting/call scenario — keeps AEC, ANS, AGC enabled
