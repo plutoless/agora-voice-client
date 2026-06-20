@@ -54,13 +54,20 @@ fi
 
 STAGE="$TMP/stage"
 mkdir -p "$STAGE"
-cp -R "$FRAMEWORK" "$STAGE/"
-for fw in "$(dirname "$FRAMEWORK")"/*.framework; do
-  [ "$fw" = "$FRAMEWORK" ] && continue
+
+# Copy all frameworks from every xcframework's macos slice
+while IFS= read -r fw; do
   cp -R "$fw" "$STAGE/"
-done
+done < <(find "$TMP/unzipped" -path '*/macos-*/*.framework' -type d -maxdepth 6)
+
 rm -rf "$DEST"
 mkdir -p "$(dirname "$DEST")"
 mv "$STAGE" "$DEST"
 echo "Installed frameworks into $DEST:"
 ls "$DEST"
+
+# Ad-hoc sign all frameworks so the hardened-runtime binary can load them
+# (avoids "Team ID mismatch" / library-validation errors at runtime)
+echo "Ad-hoc signing frameworks in $DEST ..."
+codesign --force --sign - "$DEST"/*.framework
+echo "Done."

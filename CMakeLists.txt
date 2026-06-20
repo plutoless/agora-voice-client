@@ -26,3 +26,48 @@ target_link_libraries(tests PRIVATE ZLIB::ZLIB)
 
 enable_testing()
 add_test(NAME tests COMMAND tests)
+
+# ---- Application (macOS only; links the Agora framework) ----
+add_executable(agora-voice-client
+  src/main.cpp
+  src/config.cpp
+  src/token.cpp
+  src/voice_engine_agora.mm
+)
+
+target_include_directories(agora-voice-client PRIVATE
+  ${CMAKE_SOURCE_DIR}/src
+  ${CMAKE_SOURCE_DIR}/third_party/agora-token
+)
+
+set(AGORA_FW_DIR ${CMAKE_SOURCE_DIR}/third_party/agora)
+
+target_compile_options(agora-voice-client PRIVATE -fobjc-arc -F${AGORA_FW_DIR})
+
+target_link_options(agora-voice-client PRIVATE
+  -F${AGORA_FW_DIR}
+  "-Wl,-sectcreate,__TEXT,__info_plist,${CMAKE_SOURCE_DIR}/Info.plist"
+)
+
+target_link_libraries(agora-voice-client PRIVATE
+  ZLIB::ZLIB
+  "-F${AGORA_FW_DIR}"
+  "-framework AgoraRtcKit"
+  "-framework Foundation"
+  "-framework CoreAudio"
+  "-framework AudioToolbox"
+  "-framework AVFoundation"
+  "-framework CoreMedia"
+  "-framework SystemConfiguration"
+)
+
+set_target_properties(agora-voice-client PROPERTIES
+  BUILD_RPATH   "${AGORA_FW_DIR}"
+  INSTALL_RPATH "@loader_path"
+)
+
+add_custom_command(TARGET agora-voice-client POST_BUILD
+  COMMAND codesign --force --options runtime
+          --entitlements ${CMAKE_SOURCE_DIR}/entitlements.plist
+          --sign - $<TARGET_FILE:agora-voice-client>
+  COMMENT "Ad-hoc signing agora-voice-client")
