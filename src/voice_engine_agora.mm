@@ -97,6 +97,10 @@ class AgoraVoiceEngine : public VoiceEngine {
     return true;
   }
 
+  // NOTE: renew_token() (called from the SDK delegate thread via on_token_will_expire)
+  // and stop() (called from the main thread on shutdown) both touch kit_ without a
+  // mutex. The SDK serializes delegate callbacks against teardown and the race window
+  // is negligible for this single-operator tool; revisit if that assumption changes.
   void renew_token(const std::string& token) override {
     if (kit_) [kit_ renewToken:[NSString stringWithUTF8String:token.c_str()]];
   }

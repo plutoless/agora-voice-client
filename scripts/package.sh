@@ -11,6 +11,11 @@ cp "$ROOT/build/agora-voice-client" "$OUT/"
 # Copy all Agora frameworks next to the binary.
 cp -R "$ROOT"/third_party/agora/*.framework "$OUT/"
 
+# Defensive: ad-hoc sign each bundled framework so the archive is self-contained.
+for fw in "$OUT"/*.framework; do
+  codesign --force --sign - "$fw"
+done
+
 # Make the binary find frameworks beside itself, then re-sign (install_name_tool breaks the signature).
 install_name_tool -add_rpath @loader_path "$OUT/agora-voice-client"
 codesign --force --options runtime \
