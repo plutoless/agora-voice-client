@@ -29,6 +29,41 @@ export AGORA_APP_CERTIFICATE=<your app certificate>   # tokens minted locally
 - Instead of a certificate you may set `AGORA_TOKEN=<token>` to use a token directly.
 - Press Ctrl-C to leave the channel and exit cleanly.
 
+## Machine mode (`--json`)
+
+Run with `--json` to drive the client from another program. It emits one JSON object
+per line on **stdout** (human/debug logs and any SDK noise stay on **stderr**):
+
+```bash
+./agora-voice-client --json --channel <room> --uid <N> | jq .
+```
+
+Event types (every line also has a `ts`, Unix milliseconds):
+
+| `type` | fields | meaning |
+|---|---|---|
+| `meta` | `protocol`, `client`, `version` | first line; protocol handshake |
+| `ready` | `channel`, `uid` | joined; mic live |
+| `peer_joined` / `peer_left` | `uid` | a remote participant (the AI agent) joined/left |
+| `reconnecting` / `reconnected` | — | connection dropped / restored |
+| `token_renewed` | — | token re-minted and renewed |
+| `error` | `code`, `message` | non-fatal SDK error |
+| `fatal` | `code`, `message` | unrecoverable; process exits non-zero next |
+| `stopping` | `reason` (`signal`\|`fatal`) | established session shutting down |
+
+**Terminal event guarantee.** Every `--json` run ends with exactly one terminal event
+matching the exit code:
+- pre-session failure (bad args, mint failure, join failure) → `fatal`, exit 1 or 2;
+- established session ended by Ctrl-C/SIGTERM → `stopping` (`reason:"signal"`), exit 0;
+- established session lost unrecoverably → `fatal` then `stopping` (`reason:"fatal"`),
+  exit non-zero.
+
+**Compatibility.** Within a `protocol` version, changes are additive —
+**ignore unknown event types and unknown fields**. A breaking change bumps `protocol`. See
+`docs/adr/0006-cli-integration-subprocess-jsonl.md`.
+
+`--version` and `--help` print human text (not JSON) even with `--json`.
+
 ## First run: microphone permission
 
 macOS gates the microphone. The **first** run must happen in a Terminal **at the Mac**
