@@ -1,0 +1,48 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch Agora SDK
+        run: ./scripts/fetch-sdk.sh
+
+      - name: Configure (universal, version-stamped)
+        run: >
+          cmake -S . -B build
+          -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          -DAVC_VERSION="${GITHUB_REF_NAME}"
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test (gate)
+        run: ./build/tests
+
+      - name: Package
+        run: ./scripts/package.sh universal
+
+      - name: Verify universal binary
+        run: |
+          archs=$(lipo -archs dist/agora-voice-client-macos-universal/agora-voice-client)
+          echo "archs: $archs"
+          echo "$archs" | grep -q x86_64
+          echo "$archs" | grep -q arm64
+
+      - name: Publish release (create or update asset)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz \
+            --title "$GITHUB_REF_NAME" --notes-file release-notes.md \
+          || gh release upload "$GITHUB_REF_NAME" dist/*.tar.gz --clobber
