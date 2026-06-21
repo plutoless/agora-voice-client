@@ -82,6 +82,17 @@ Windows opens stdout in text mode, translating `\n`→`\r\n`, which would corrup
 Windows (`_setmode(_fileno(stdout), _O_BINARY)`), so event lines remain LF-only. Guarded by
 `#ifdef _WIN32`; no effect on macOS.
 
+## Clean shutdown on Windows
+
+The MSVC CRT delivers **Ctrl-C as `SIGINT`**, so the existing `std::signal(SIGINT, …)`
+handler already gives a clean `leaveChannel` on Windows — the same model as macOS. Closing
+the console window (the X), logoff, or shutdown sends `CTRL_CLOSE_EVENT` (not SIGINT) and is
+**not** handled in v1, so an abrupt window-close may leave a *transient* ghost participant
+(Agora reaps stale peers via its own keepalive within seconds). The README documents
+"close with Ctrl-C, not the window." A `SetConsoleCtrlHandler` is deferred (YAGNI: the OS
+gives the handler only ~5s before killing the process and runs it on a separate thread, so a
+clean leave isn't guaranteed anyway).
+
 ## SDK fetch — `scripts/fetch-sdk.sh` becomes OS-aware
 
 Detects the OS (`uname` → `Darwin` vs `MINGW*/MSYS*` on the runner's git-bash). For Windows
@@ -93,14 +104,23 @@ internal layout (include/ and lib paths) is confirmed when writing the plan.
 ## CI
 
 - **New `.github/workflows/ci.yml`** (triggers: `push`, `pull_request`): a matrix of
-  `macos-15` and `windows-latest`. Steps: checkout → `fetch-sdk.sh` (OS-aware) → CMake
-  configure → build → run unit tests (`./build/tests` / `build\…\tests.exe`). This is the
-  iteration loop and also guards macOS against cross-platform regressions in shared code.
+  `macos-15` and `windows-latest`. Steps: checkout → **restore SDK cache** → `fetch-sdk.sh`
+  (OS-aware, cache-miss fallback) → CMake configure → build → run unit tests
+  (`./build/tests` / `build\…\tests.exe`). This is the iteration loop and also guards macOS
+  against cross-platform regressions in shared code.
+  - **Caching:** `actions/cache` keyed on `${{ runner.os }}-agora-<SDK_VERSION>` wrapping
+    `third_party/agora/`, and a second cache keyed on the pinned zlib version wrapping the
+    FetchContent build dir (`build/_deps`). A version bump busts the key. This turns the
+    ~88 MB+ SDK download into a one-time cost per version per runner-OS, keeping the
+    push→watch→iterate loop fast. (Repo is public, so Actions minutes are free — caching is
+    for speed.)
 - **Extend `release.yml`** with a `windows` job (alongside `macos`): fetch SDK → configure
   (Release) → build → test gate → package → upload `agora-voice-client-windows-x64.zip` to
   the same Release. Both jobs use the create-or-clobber idempotency
   (`gh release create … || gh release upload … --clobber`) so the two jobs racing to create
-  the release is tolerated (one creates, the other uploads).
+  the release is tolerated (GitHub enforces one Release per tag server-side: one job
+  creates, the other falls through to upload). `release-notes.md` is **broadened to cover
+  both macOS and Windows** so the notes are correct regardless of which job wins the create.
 
 ## Packaging & docs
 
@@ -116,6 +136,13 @@ internal layout (include/ and lib paths) is confirmed when writing the plan.
 
 ## Testing / verification
 
+- **Local pre-CI (on this macOS machine):** `voice_engine_agora_win.cpp` is pure C++
+  `IRtcEngine` (no Win32 API — BCrypt is isolated to `hmac_windows.cpp`, `_setmode` is a
+  one-line `#ifdef` in `main`), so it is **syntax-checked locally** against the bundled C++
+  headers: `clang++ -std=c++17 -fsyntax-only -I third_party/agora/AgoraRtcKit.framework/Headers
+  src/voice_engine_agora_win.cpp`. This validates every symbol/enum/signature before pushing,
+  converting most of the engine from "blind CI-only" to "locally verified." The bundled C++
+  headers are the authoritative API reference when writing the engine.
 - **Automated (CI, both platforms):** the unit suite — `config`, `token` (incl. HMAC vs
   RFC 4231, now exercising BCrypt on Windows and CommonCrypto on macOS), `event_reporter`.
   Green on the `windows-latest` matrix leg proves the portable core + BCrypt path.
