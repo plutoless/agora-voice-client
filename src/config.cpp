@@ -12,6 +12,9 @@ const char* kUsage =
 
 std::uint32_t parse_u32(const std::string& s, const char* what) {
   try {
+    // Reject negative strings explicitly — std::stoul behaviour for "-n" is
+    // implementation-defined (MSVC wraps instead of throwing).
+    if (!s.empty() && s[0] == '-') throw std::invalid_argument(what);
     size_t pos = 0;
     unsigned long v = std::stoul(s, &pos);
     if (pos != s.size()) throw std::invalid_argument(what);
