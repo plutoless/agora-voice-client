@@ -35,3 +35,9 @@ The fixed numeric Agora user id the Operator picks (via `--uid`) for the Client.
 coordinated identifier: the AI Agent must be configured to subscribe to this same value,
 and the token is minted bound to it. uid `0` (auto-assign) only suits solo testing.
 _Avoid_: user id, account, id
+
+**Consumer**:
+A program (a CLI, script, or orchestrator) that runs the Client as a subprocess and reads
+its JSONL event stream from stdout to drive a "talk to the AI agent from the shell"
+experience. Distinct from the Operator (a human); a Consumer is automation.
+_Avoid_: caller, host, parent, driver

@@ -215,3 +215,24 @@ The download skill selects the right archive for the host, unpacks it, and runs
   - Confirm clean exit on Ctrl-C (no ghost participant remains).
 
   Fully automated audio testing is not worth the cost for this tool (YAGNI).
+
+## Implementation Notes (post-build reconciliation)
+
+Discovered while building; recorded so the design matches reality:
+
+- **SDK package:** Agora no longer publishes a standalone *Voice* SDK zip on the public
+  CDN — only the **FULL** Native SDK package (`Agora_Native_SDK_for_Mac_v<ver>_FULL.zip`,
+  pinned to 4.4.0). It contains the same `AgoraRtcKit` framework, plus sibling frameworks
+  (`aosl.framework`, `Agoraffmpeg.framework`, …) that `AgoraRtcKit` loads at runtime.
+  `scripts/fetch-sdk.sh` extracts and ad-hoc-signs all of them.
+- **Token builder is header-only:** the vendored AccessToken2 implementation lives inline
+  in `utils.h` (no `AccessToken2.cpp`). The OpenSSL HMAC was swapped for CommonCrypto in
+  `utils.h`; the patch is documented in `third_party/agora-token/PATCHES.md`. The builder
+  also needs **zlib** (linked via `find_package(ZLIB)`).
+- **Audio scenario:** `AgoraAudioScenarioMeeting` (set via `AgoraRtcEngineConfig.audioScenario`)
+  keeps AEC/ANS/AGC on; the combined `setAudioProfile:scenario:` is deprecated.
+- **Code signing:** the binary is ad-hoc signed with hardened runtime, the embedded
+  Info.plist, and entitlements `com.apple.security.device.audio-input` **plus**
+  `com.apple.security.cs.disable-library-validation` (required so the ad-hoc binary may
+  load Agora's differently-signed dylibs). `scripts/package.sh` produces a relocatable
+  archive via an `@loader_path` rpath and re-signs binary + frameworks.
