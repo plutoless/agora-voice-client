@@ -82,6 +82,34 @@ The archive bundles the Agora frameworks next to the binary (`@loader_path` rpat
 runs on another macOS arm64 machine without a separate SDK download. The microphone-permission
 note above still applies on the new machine.
 
+## Windows (x64)
+
+**Prebuilt:** download `agora-voice-client-windows-x64.zip` from the latest
+[release](https://github.com/plutoless/agora-voice-client/releases), unzip, and run
+`agora-voice-client.exe` (the Agora DLLs ship beside it). It is unsigned, so SmartScreen
+may warn → **More info → Run anyway**.
+
+**Build from source** (Visual Studio 2022 + CMake; run from a Git Bash shell for the fetch step):
+```bat
+bash scripts/fetch-sdk.sh
+cmake -S . -B build
+cmake --build build --config Release
+build\Release\tests.exe
+```
+
+**Run:**
+```bat
+set AGORA_APP_ID=<app id>
+set AGORA_APP_CERTIFICATE=<certificate>
+agora-voice-client.exe --channel <room> --uid <N>
+```
+
+- Enable **Settings → Privacy & security → Microphone → "Let desktop apps access your
+  microphone"** (Windows gates mic access globally; there is no per-app prompt).
+- Close with **Ctrl-C**, not the window — closing the console window can't leave the
+  channel cleanly and may leave a brief ghost participant.
+- `--json` (machine mode) and `--version` behave exactly as on macOS.
+
 ## Manual integration test
 
 1. Have a second participant join the same channel: the AI agent, or the

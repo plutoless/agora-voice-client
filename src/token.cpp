@@ -1,20 +1,9 @@
 #include "token.h"
 #include "cpp/src/RtcTokenBuilder2.h"   // vendored; resolved via include dir in CMake
-#include <CommonCrypto/CommonHMAC.h>
 #include <stdexcept>
 #include <vector>
 
 namespace avc {
-
-std::vector<unsigned char> hmac_sha256(const std::vector<unsigned char>& key,
-                                       const std::vector<unsigned char>& message) {
-  std::vector<unsigned char> out(CC_SHA256_DIGEST_LENGTH);
-  CCHmac(kCCHmacAlgSHA256,
-         key.empty() ? nullptr : key.data(), key.size(),
-         message.empty() ? nullptr : message.data(), message.size(),
-         out.data());
-  return out;
-}
 
 std::string build_rtc_token(const std::string& app_id,
                             const std::string& app_certificate,
