@@ -6,6 +6,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+if(APPLE)
+  set(AVC_HMAC_SRC src/hmac_apple.cpp)
+elseif(WIN32)
+  set(AVC_HMAC_SRC src/hmac_windows.cpp)
+endif()
+
 find_package(ZLIB REQUIRED)
 
 # ---- Tests (pure C++, no Agora RTC SDK needed) ----
@@ -17,6 +23,7 @@ add_executable(tests
   tests/test_event_reporter.cpp
   src/config.cpp
   src/token.cpp
+  ${AVC_HMAC_SRC}
   src/event_reporter.cpp
 )
 target_include_directories(tests PRIVATE
@@ -34,6 +41,7 @@ add_executable(agora-voice-client
   src/main.cpp
   src/config.cpp
   src/token.cpp
+  ${AVC_HMAC_SRC}
   src/event_reporter.cpp
   src/voice_engine_agora.mm
 )
