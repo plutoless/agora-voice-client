@@ -81,7 +81,7 @@ case "$OS" in
   MINGW*|MSYS*|CYGWIN*)
     # ===== Windows (git-bash / MSYS2 / Cygwin on GitHub Actions runner) =====
     WIN_URL="https://download.agora.io/sdk/release/Agora_Native_SDK_for_Windows_v${SDK_VERSION}_FULL.zip"
-    WIN_SHA256="PUT_WINDOWS_SHA256_HERE"   # first CI run prints it; pin then
+    WIN_SHA256="90db8f9e0e91b992808460023dccc4b9849477d8da7a5bd5fd4f7d3cf75a6847"
     DEST="$ROOT/third_party/agora"
 
     echo "Downloading Windows SDK ${SDK_VERSION} ..."
