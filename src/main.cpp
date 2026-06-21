@@ -10,6 +10,11 @@
 #include <thread>
 #include <vector>
 
+#ifdef _WIN32
+#include <io.h>
+#include <fcntl.h>
+#endif
+
 #include "config.h"
 #include "event_reporter.h"
 #include "token.h"
@@ -25,6 +30,9 @@ void handle_signal(int) { g_stop.store(true); }
 }  // namespace
 
 int main(int argc, char** argv) {
+#ifdef _WIN32
+  _setmode(_fileno(stdout), _O_BINARY);  // keep JSONL lines LF-only on Windows
+#endif
   bool json_mode = false;
   std::vector<std::string> args;
   for (int i = 1; i < argc; ++i) {
