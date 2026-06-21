@@ -1,0 +1,40 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Agora SDK
+        uses: actions/cache@v4
+        with:
+          path: third_party/agora
+          key: ${{ runner.os }}-agora-4.4.0
+
+      - name: Fetch Agora SDK
+        shell: bash
+        run: ./scripts/fetch-sdk.sh
+
+      - name: Configure
+        shell: bash
+        run: cmake -S . -B build
+
+      - name: Build
+        shell: bash
+        run: cmake --build build --config Debug
+
+      - name: Test
+        shell: bash
+        run: |
+          if [ -f build/tests ]; then ./build/tests; \
+          elif [ -f build/Debug/tests.exe ]; then ./build/Debug/tests.exe; \
+          else ./build/tests.exe; fi
