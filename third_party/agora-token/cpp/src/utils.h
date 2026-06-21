@@ -1,7 +1,13 @@
 #pragma once
 
-// LOCAL MODIFICATION (see ../../PATCHES.md): OpenSSL HMAC replaced with CommonCrypto/avc::hmac_sha256
+// LOCAL MODIFICATION (see ../../PATCHES.md): OpenSSL HMAC replaced with
+// platform HMAC (CommonCrypto on Apple, BCrypt on Windows) via avc::hmac_sha256
+#ifdef __APPLE__
 #include <CommonCrypto/CommonHMAC.h>
+#elif defined(_WIN32)
+#include <windows.h>
+#include <bcrypt.h>
+#endif
 #include <vector>
 #include "token.h"
 #include <zlib.h>
@@ -83,13 +89,35 @@ namespace agora
             {
                 return "";
             }
-            // SHA1 via CommonCrypto (legacy builder path, not used by RtcTokenBuilder2).
+            // SHA1 HMAC — legacy builder path, not called by RtcTokenBuilder2.
+#ifdef __APPLE__
             unsigned char md[CC_SHA1_DIGEST_LENGTH];
             CCHmac(kCCHmacAlgSHA1,
                    appCertificate.data(), appCertificate.length(),
                    message.data(), message.length(),
                    md);
             return std::string(reinterpret_cast<char *>(md), signSize);
+#elif defined(_WIN32)
+            // BCrypt SHA1-HMAC for Windows
+            BCRYPT_ALG_HANDLE alg = nullptr;
+            BCryptOpenAlgorithmProvider(&alg, BCRYPT_SHA1_ALGORITHM, nullptr,
+                                        BCRYPT_ALG_HANDLE_HMAC_FLAG);
+            BCRYPT_HASH_HANDLE hash = nullptr;
+            BCryptCreateHash(alg, &hash, nullptr, 0,
+                             reinterpret_cast<PUCHAR>(const_cast<char*>(appCertificate.data())),
+                             static_cast<ULONG>(appCertificate.length()), 0);
+            BCryptHashData(hash,
+                           reinterpret_cast<PUCHAR>(const_cast<char*>(message.data())),
+                           static_cast<ULONG>(message.length()), 0);
+            unsigned char md[20]; // SHA1 = 20 bytes
+            BCryptFinishHash(hash, md, 20, 0);
+            BCryptDestroyHash(hash);
+            BCryptCloseAlgorithmProvider(alg, 0);
+            return std::string(reinterpret_cast<char *>(md), signSize);
+#else
+            (void)message;
+            return std::string(signSize, '\0');
+#endif
         }
 
         // BEFORE (original OpenSSL body — replaced in Task 4):
