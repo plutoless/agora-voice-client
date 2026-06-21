@@ -21,3 +21,18 @@ export AGORA_APP_CERTIFICATE=<your app certificate>
 - `./agora-voice-client --version` prints this build's version.
 
 See the repository README for full usage and the manual integration checklist.
+
+## Windows (x64)
+
+Unzip `agora-voice-client-windows-x64.zip` and run `agora-voice-client.exe` (the Agora
+DLLs ship beside it). Unsigned, so SmartScreen may warn → **More info → Run anyway**.
+
+```bat
+set AGORA_APP_ID=<your app id>
+set AGORA_APP_CERTIFICATE=<your app certificate>
+agora-voice-client.exe --channel <room> --uid <N>
+```
+
+Enable **Settings → Privacy & security → Microphone → "Let desktop apps access your
+microphone"**. Close with **Ctrl-C** (not the window) for a clean leave. `--json` and
+`--version` behave the same as macOS.

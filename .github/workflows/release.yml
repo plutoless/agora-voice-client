@@ -46,3 +46,30 @@ jobs:
           gh release create "$GITHUB_REF_NAME" dist/*.tar.gz \
             --title "$GITHUB_REF_NAME" --notes-file release-notes.md \
           || gh release upload "$GITHUB_REF_NAME" dist/*.tar.gz --clobber
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch Agora SDK
+        shell: bash
+        run: ./scripts/fetch-sdk.sh
+      - name: Configure
+        shell: bash
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAVC_VERSION="${GITHUB_REF_NAME}"
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test (gate)
+        shell: bash
+        run: ./build/Release/tests.exe
+      - name: Package
+        shell: pwsh
+        run: ./scripts/package-windows.ps1
+      - name: Publish release (create or update asset)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.zip \
+            --title "$GITHUB_REF_NAME" --notes-file release-notes.md \
+          || gh release upload "$GITHUB_REF_NAME" dist/*.zip --clobber
